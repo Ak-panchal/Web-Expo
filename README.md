@@ -1,3 +1,1 @@
-# devopsal2
-hii
-i m developer
+BikaTech Warrior community 
