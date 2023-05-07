@@ -1,0 +1,217 @@
+// SPDX-License-Identifier: MIT
+
+pragma solidity ^0.8.0;
+
+import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
+
+contract NFTTicket is ERC721 {
+    using SafeMath for uint256;
+
+    // Structure for ticket details
+    struct Ticket {
+        uint256 index;
+        uint256 price;
+        bool sold;
+    }
+
+    // Structure for event details
+    struct Event {
+        string name;
+        string date;
+        string time;
+        string venue;
+        string description;
+        string socialMediaPost;
+        string virtualEventLink;
+        string virtualEventCredentials;
+        Ticket[] tickets;
+    }
+
+    // Maximum number of tickets available for sale
+    uint256 constant MAX_TICKETS = 1000;
+
+    // Base price of each ticket
+    uint256 constant BASE_TICKET_PRICE = 1 ether;
+
+    // Address of the contract owner
+    address payable owner;
+
+    // Total number of tickets sold
+    uint256 totalTicketsSold;
+
+    // Details of the event
+    Event eventDetails;
+
+    constructor() ERC721("NFT Ticket", "TICKET") {
+        owner = payable(msg.sender);
+    }
+
+    // Mint a new NFT ticket with the given token ID and price
+    function mintTicket(uint256 _tokenId, uint256 _price) public onlyOwner {
+        require(!tokenExists(_tokenId), "Token ID already exists");
+        require(_price >= BASE_TICKET_PRICE, "Price must be at least the base ticket price");
+        require(eventDetails.tickets.length < MAX_TICKETS, "All tickets have been sold");
+
+        // Add the new ticket to the event details
+        eventDetails.tickets.push(Ticket(eventDetails.tickets.length, _price, false));
+
+        // Mint the NFT ticket to the contract owner
+        _safeMint(owner, _tokenId);
+    }
+
+    // Buy a ticket with the given token ID
+    function buyTicket(uint256 _tokenId) public payable {
+        require(tokenExists(_tokenId), "Token ID does not exist");
+        require(!eventDetails.tickets[_tokenId].sold, "Ticket has already been sold");
+        require(msg.value >= eventDetails.tickets[_tokenId].price, "Insufficient payment");
+
+        // Mark the ticket as sold
+        eventDetails.tickets[_tokenId].sold = true;
+
+        // Increment the total number of tickets sold
+        totalTicketsSold = totalTicketsSold.add(1);
+
+        // Transfer the ticket to the buyer
+        _transfer(owner, msg.sender, _tokenId);
+
+        // Refund any excess payment to the buyer
+        if (msg.value > eventDetails.tickets[_tokenId].price) {
+            payable(msg.sender).transfer(msg.value.sub(eventDetails.tickets[_tokenId].price));
+        }
+    }
+}
+// Update the event details
+function updateEventDetails(
+    string memory _name,
+    string memory _date,
+    string memory _time,
+    string memory _venue,
+    string memory _description,
+    string memory _socialMediaPost,
+    string memory _virtualEventLink,
+    string memory _virtualEventCredentials
+) public onlyOwner {
+    eventDetails.name = _name;
+    eventDetails.date = _date;
+    eventDetails.time = _time;
+    eventDetails.venue = _venue;
+    eventDetails.description = _description;
+    eventDetails.socialMediaPost = _socialMediaPost;
+    eventDetails.virtualEventLink = _virtualEventLink;
+    eventDetails.virtualEventCredentials = _virtualEventCredentials;
+}
+
+// Get the details of the event
+function getEventDetails() public view returns (
+    string memory,
+    string memory,
+    string memory,
+    string memory,
+    string memory,
+    string memory,
+    string memory,
+    string memory,
+    uint256,
+    uint256,
+    uint256
+) {
+    return (
+        eventDetails.name,
+        eventDetails.date,
+        eventDetails.time,
+        eventDetails.venue,
+        eventDetails.description,
+        eventDetails.socialMediaPost,
+        eventDetails.virtualEventLink,
+        eventDetails.virtualEventCredentials,
+        eventDetails.tickets.length,
+        MAX_TICKETS,
+        totalTicketsSold
+    );
+}
+
+// Get the details of a ticket with the given token ID
+function getTicketDetails(uint256 _tokenId) public view returns (
+    uint256,
+    uint256,
+    bool
+) {
+    require(tokenExists(_tokenId), "Token ID does not exist");
+
+    return (
+        eventDetails.tickets[_tokenId].index,
+        eventDetails.tickets[_tokenId].price,
+        eventDetails.tickets[_tokenId].sold
+    );
+}
+
+// Check if a ticket with the given token ID exists
+function tokenExists(uint256 _tokenId) public view returns (bool) {
+    return _exists(_tokenId);
+}
+
+
+// Check if the caller is the contract owner
+modifier onlyOwner() {
+    require(msg.sender == owner, "Caller is not the contract owner");
+    _;
+}
+// Buy a ticket with the given token ID
+function buyTicket(uint256 _tokenId) public payable {
+    require(tokenExists(_tokenId), "Token ID does not exist");
+    require(!eventDetails.tickets[_tokenId].sold, "Ticket already sold");
+    require(msg.value == eventDetails.tickets[_tokenId].price, "Incorrect payment amount");
+
+    _safeTransfer(owner, msg.sender, _tokenId, "");
+    eventDetails.tickets[_tokenId].sold = true;
+    totalTicketsSold++;
+
+    emit TicketPurchased(msg.sender, _tokenId);
+}
+
+// Get the list of available tickets
+function getAvailableTickets() public view returns (uint256[] memory) {
+    uint256[] memory availableTickets = new uint256[](MAX_TICKETS - totalTicketsSold);
+    uint256 currentIndex = 0;
+
+    for (uint256 i = 0; i < eventDetails.tickets.length; i++) {
+        if (!eventDetails.tickets[i].sold) {
+            availableTickets[currentIndex] = i;
+            currentIndex++;
+        }
+    }
+
+    return availableTickets;
+}
+
+// Get the list of sold tickets
+function getSoldTickets() public view returns (uint256[] memory) {
+    uint256[] memory soldTickets = new uint256[](totalTicketsSold);
+    uint256 currentIndex = 0;
+
+    for (uint256 i = 0; i < eventDetails.tickets.length; i++) {
+        if (eventDetails.tickets[i].sold) {
+            soldTickets[currentIndex] = i;
+            currentIndex++;
+        }
+    }
+
+    return soldTickets;
+}
+
+// Withdraw the contract balance to the owner
+function withdrawBalance() public onlyOwner {
+    payable(owner).transfer(address(this).balance);
+}
+
+// Check if the caller is the contract owner
+modifier onlyOwner() {
+    require(msg.sender == owner, "Caller is not the contract owner");
+    _;
+}
+
+// Check if a ticket with the given token ID exists
+function tokenExists(uint256 _tokenId) public view returns (bool) {
+    return _exists(_tokenId);
+}
